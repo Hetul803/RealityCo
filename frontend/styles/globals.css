@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-bg text-white antialiased;
+  min-height: 100vh;
+  letter-spacing: 0.01em;
+  background:
+    radial-gradient(900px 500px at 8% -8%, rgba(122, 139, 255, 0.24), transparent 55%),
+    radial-gradient(720px 420px at 92% -4%, rgba(110, 231, 215, 0.15), transparent 52%),
+    linear-gradient(180deg, #060913 0%, #070b16 35%, #060912 100%);
+}
+
+::selection {
+  background: rgba(122, 139, 255, 0.35);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.glass {
+  @apply border border-white/10 bg-white/[0.04] backdrop-blur-2xl;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.panel-glow {
+  box-shadow: 0 24px 80px rgba(9, 14, 28, 0.7), 0 0 60px rgba(122, 139, 255, 0.2);
+}
+
+.ambient-grid {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(circle at center, black 30%, transparent 80%);
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.28);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.7s ease-out infinite;
+}
