@@ -13,7 +13,7 @@ import { SessionTimelinePanel, type TimelineEntry } from "@/components/SessionTi
 import { TranscriptPanel } from "@/components/TranscriptPanel";
 import { WaveformVisualizer } from "@/components/WaveformVisualizer";
 import { useSpeechInput } from "@/hooks/useSpeechInput";
-import { analyzeFrame, createSession, sendTranscript } from "@/lib/api";
+import { analyzeFrame, createSession, sendTranscript, testConnectivity, directBackendTest } from "@/lib/api";
 import { AnalysisResponse, Annotation, AppMode, SessionState, TranscriptEntry } from "@/lib/contracts";
 import { captureFrame, getUserMediaStream, speakText } from "@/lib/media";
 
@@ -94,6 +94,22 @@ export default function LiveAppPage() {
   const [frameHint, setFrameHint] = useState<string | null>(null);
   const [showDemoGuide, setShowDemoGuide] = useState(false);
   const [uiStatus, setUiStatus] = useState("Listening");
+  const [autoAnalysis, setAutoAnalysis] = useState(false);
+  const [analysisInterval, setAnalysisInterval] = useState(60000); // 60 seconds
+  const [nextAnalysisCountdown, setNextAnalysisCountdown] = useState<number | null>(null);
+  const [voiceCommandMode, setVoiceCommandMode] = useState(true);
+  const [lastVoiceCommand, setLastVoiceCommand] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+
+  const testBackendConnection = async () => {
+    try {
+      setDebugInfo("🧪 Testing backend connection...");
+      const result = await directBackendTest();
+      setDebugInfo(result);
+    } catch (error: any) {
+      setDebugInfo(`❌ Backend test failed: ${error.message}`);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -116,98 +132,6 @@ export default function LiveAppPage() {
     [fillerCounts]
   );
   const livePaceHint = useMemo(() => paceHintFromWpm(estimateWpm(transcript)), [transcript]);
-
-  const onFinalSpeech = useCallback(
-    async (text: string) => {
-      if (!sessionId || muted || isAnalyzing) return;
-      addTranscript("user", text);
-      setUiStatus("Processing transcript");
-      setState("thinking");
-      try {
-        const response = await sendTranscript(sessionId, text);
-        addTranscript("assistant", response.spoken_text);
-        setUiStatus("Speaking response");
-        speakText(response.spoken_text);
-        setState("agent_speaking");
-        setTimeout(() => {
-          setState("listening");
-          setUiStatus("Listening");
-        }, 900);
-      } catch {
-        setState("error");
-        setUiStatus("Error");
-        setError("AI analysis temporarily unavailable. Try again.");
-      }
-    },
-    [addTranscript, isAnalyzing, muted, sessionId]
-  );
-
-  const speech = useSpeechInput(onFinalSpeech);
-
-  useEffect(() => {
-    if (!isAnalyzing) {
-      setAnalysisDelayHint(false);
-      return;
-    }
-    const t = setTimeout(() => setAnalysisDelayHint(true), 4200);
-    return () => clearTimeout(t);
-  }, [isAnalyzing]);
-
-  const startSession = useCallback(async () => {
-    try {
-      setError(null);
-      setUiStatus("Connecting");
-      setState("connecting");
-      const created = await createSession();
-      setSessionId(created.session_id);
-
-      try {
-        const media = await getUserMediaStream(true, true);
-        setStream(media);
-        if (videoRef.current) videoRef.current.srcObject = media;
-      } catch {
-        if (mode === "visual_guide") {
-          throw new Error("Camera unavailable — allow camera access for Visual Guide mode.");
-        }
-        addTranscript("assistant", "Camera unavailable — transcript-only coaching will still work.");
-        setError("Camera unavailable — transcript-only coaching will still work.");
-      }
-
-      setState("listening");
-      setUiStatus("Listening");
-      if (speech.isSupported) speech.start();
-      if (!speech.isSupported) {
-        addTranscript("assistant", "Speech recognition is unavailable in this browser, but analysis is still available.");
-      }
-      pushTimeline("Session started");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start session.");
-      setState("error");
-      setUiStatus("Error");
-    }
-  }, [addTranscript, mode, pushTimeline, speech]);
-
-  const endSession = useCallback(() => {
-    speech.stop();
-    stream?.getTracks().forEach((t) => t.stop());
-    setStream(null);
-    setState("idle");
-    setFrozenFrame(null);
-    setSessionId(null);
-    setIsAnalyzing(false);
-    setAnnotations([]);
-    setInsight(null);
-    setUiStatus("Idle");
-    pushTimeline("Session ended");
-  }, [pushTimeline, speech, stream]);
-
-  const toggleMute = useCallback(() => {
-    if (!stream) return;
-    stream.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-      setMuted(!track.enabled);
-    });
-  }, [stream]);
 
   const freeze = useCallback(() => {
     if (!videoRef.current || !stream || isAnalyzing) return;
@@ -304,6 +228,234 @@ export default function LiveAppPage() {
     pushTimeline
   ]);
 
+  const onFinalSpeech = useCallback(
+    async (text: string) => {
+      if (!sessionId || muted || isAnalyzing) return;
+      
+      // Voice command detection
+      if (voiceCommandMode) {
+        const lowerText = text.toLowerCase().trim();
+        
+        if (lowerText.includes("reality") || lowerText.includes("hey reality")) {
+          if (lowerText.includes("analyze") || lowerText.includes("check out") || lowerText.includes("look at")) {
+            setLastVoiceCommand("🎤 Voice: Analyze frame");
+            pushTimeline("Voice command: Analyze frame");
+            setTimeout(() => runAnalysis(), 500);
+            return;
+          }
+          if (lowerText.includes("freeze")) {
+            setLastVoiceCommand("🎤 Voice: Freeze frame");
+            pushTimeline("Voice command: Freeze frame");
+            freeze();
+            return;
+          }
+          if (lowerText.includes("resume") || lowerText.includes("unfreeze")) {
+            setLastVoiceCommand("🎤 Voice: Resume live");
+            pushTimeline("Voice command: Resume live");
+            if (frozenFrame) freeze();
+            return;
+          }
+          if (lowerText.includes("clear") || lowerText.includes("remove")) {
+            setLastVoiceCommand("🎤 Voice: Clear overlays");
+            pushTimeline("Voice command: Clear overlays");
+            setAnnotations([]);
+            return;
+          }
+          if (lowerText.includes("auto") || lowerText.includes("automatic")) {
+            if (lowerText.includes("on") || lowerText.includes("start")) {
+              setLastVoiceCommand("🎤 Voice: Auto analysis ON");
+              pushTimeline("Voice command: Auto analysis enabled");
+              setAutoAnalysis(true);
+              return;
+            }
+            if (lowerText.includes("off") || lowerText.includes("stop")) {
+              setLastVoiceCommand("🎤 Voice: Auto analysis OFF");
+              pushTimeline("Voice command: Auto analysis disabled");
+              setAutoAnalysis(false);
+              return;
+            }
+          }
+        }
+        
+        // Proactive analysis triggers
+        if (lowerText.includes("what do you see") || 
+            lowerText.includes("can you see") || 
+            lowerText.includes("look at") ||
+            lowerText.includes("check out")) {
+          setLastVoiceCommand("🧠 Auto-trigger: Visual question detected");
+          pushTimeline("Auto-triggered analysis from conversation");
+          setTimeout(() => runAnalysis(), 1000);
+        }
+      }
+      
+      addTranscript("user", text);
+      setUiStatus("Processing transcript");
+      setState("thinking");
+      try {
+        const response = await sendTranscript(sessionId, text);
+        addTranscript("assistant", response.spoken_text);
+        setUiStatus("Speaking response");
+        speakText(response.spoken_text);
+        setState("agent_speaking");
+        setTimeout(() => {
+          setState("listening");
+          setUiStatus("Listening");
+        }, 900);
+      } catch {
+        setState("error");
+        setUiStatus("Error");
+        setError("AI analysis temporarily unavailable. Try again.");
+      }
+    },
+    [addTranscript, isAnalyzing, muted, sessionId, voiceCommandMode, frozenFrame, freeze, runAnalysis, pushTimeline]
+  );
+
+  const speech = useSpeechInput(onFinalSpeech);
+
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setAnalysisDelayHint(false);
+      return;
+    }
+    const t = setTimeout(() => setAnalysisDelayHint(true), 4200);
+    return () => clearTimeout(t);
+  }, [isAnalyzing]);
+
+  // Continuous analysis effect
+  useEffect(() => {
+    if (!autoAnalysis || !stream || !sessionId || isAnalyzing) {
+      if (nextAnalysisCountdown) setNextAnalysisCountdown(null);
+      return;
+    }
+
+    let countdownInterval: NodeJS.Timeout;
+    let countdown = 60;
+
+    const startCountdown = () => {
+      countdown = 60;
+      setNextAnalysisCountdown(countdown);
+      
+      countdownInterval = setInterval(() => {
+        countdown -= 1;
+        setNextAnalysisCountdown(countdown);
+        
+        if (countdown <= 0) {
+          clearInterval(countdownInterval);
+          runAnalysis();
+        }
+      }, 1000);
+    };
+
+    startCountdown();
+
+    return () => {
+      clearInterval(countdownInterval);
+    };
+  }, [autoAnalysis, stream, sessionId, isAnalyzing]);
+
+  const startSession = useCallback(async () => {
+    try {
+      // Check if HTTPS is required for camera access
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        throw new Error("Camera access requires HTTPS. Please use https:// or localhost.");
+      }
+
+      setError(null);
+      setUiStatus("Connecting");
+      setState("connecting");
+      
+      console.log("Creating session...");
+      const created = await createSession();
+      console.log("Session created:", created);
+      setSessionId(created.session_id);
+
+      try {
+        console.log("Getting user media...");
+        const media = await getUserMediaStream(true, true);
+        console.log("Media stream obtained:", media);
+        setStream(media);
+        if (videoRef.current) {
+          console.log("Setting video srcObject...");
+          videoRef.current.srcObject = media;
+          console.log("Video srcObject set");
+          
+          // Ensure video plays
+          videoRef.current.play().then(() => {
+            console.log("Video started playing successfully");
+          }).catch(playError => {
+            console.error("Video play error:", playError);
+          });
+        }
+      } catch (mediaError: any) {
+        console.error("Media error:", mediaError);
+        if (mode === "visual_guide") {
+          throw new Error(`Camera unavailable — ${mediaError?.message || "allow camera access for Visual Guide mode."}`);
+        }
+        addTranscript("assistant", `Camera unavailable — ${mediaError?.message || "transcript-only coaching will still work."}`);
+        setError(`Camera unavailable — ${mediaError?.message || "transcript-only coaching will still work."}`);
+      }
+
+      setState("listening");
+      setUiStatus("Listening");
+      if (speech.isSupported) speech.start();
+      if (!speech.isSupported) {
+        addTranscript("assistant", "Speech recognition is unavailable in this browser, but analysis is still available.");
+      }
+      pushTimeline("Session started");
+    } catch (sessionError: any) {
+      console.error("Session error:", sessionError);
+      setState("error");
+      setUiStatus("Error");
+      setError(sessionError?.message || "Failed to start session. Please try again.");
+    }
+  }, [addTranscript, mode, pushTimeline, speech]);
+
+  const endSession = useCallback(() => {
+    console.log("Ending session...");
+    
+    // Stop speech recognition first
+    try {
+      speech.stop();
+      console.log("Speech recognition stopped");
+    } catch (error) {
+      console.error("Error stopping speech:", error);
+    }
+    
+    // Stop camera stream
+    try {
+      stream?.getTracks().forEach((t: any) => {
+        t.stop();
+        console.log("Media track stopped:", t.kind);
+      });
+      setStream(null);
+    } catch (error) {
+      console.error("Error stopping stream:", error);
+    }
+    
+    // Reset all session state
+    setState("idle");
+    setFrozenFrame(null);
+    setSessionId(null);
+    setIsAnalyzing(false);
+    setAnnotations([]);
+    setInsight(null);
+    setUiStatus("Idle");
+    setAutoAnalysis(false);
+    setNextAnalysisCountdown(null);
+    setLastVoiceCommand(null);
+    pushTimeline("Session ended");
+    
+    console.log("Session ended successfully");
+  }, [pushTimeline, speech, stream]);
+
+  const toggleMute = useCallback(() => {
+    if (!stream) return;
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !track.enabled;
+      setMuted(!track.enabled);
+    });
+  }, [stream]);
+
   const subtitle = useMemo(() => {
     if (error) return error;
     if (speech.interimText) return `Listening: ${speech.interimText}`;
@@ -383,15 +535,38 @@ export default function LiveAppPage() {
 
       {!sessionId ? (
         <div className="glass mb-4 rounded-2xl p-4 text-sm text-white/65">
-          <p className="mb-2 text-white/85">First run checklist</p>
+          <p className="mb-2 text-white/85">🚀 Reality Copilot 2.0 - Auto Intelligence Edition</p>
           <div className="flex flex-wrap gap-2">
-            {["Start session", "Allow permissions", "Speak naturally", mode === "interview_coach" ? "Coach My Answer" : "Analyze frame"].map((step, idx) => (
-              <span key={step} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70">
+            {["Start session", "Allow permissions", "Try voice commands", "Enable auto-analysis"].map((step, idx) => (
+              <span key={step} className="rounded-full border border-mint/30 bg-mint/10 px-3 py-1 text-xs text-mint">
                 {idx + 1}. {step}
               </span>
             ))}
           </div>
-          <p className="mt-3 text-xs text-white/55">Interview Coach is transcript-first. Camera context is optional and limited to visible setup cues.</p>
+          <p className="mt-3 text-xs text-white/55">🎯 NEW: Auto-analysis every 60s + hands-free voice control!</p>
+          <div className="mt-2 space-y-1 text-xs text-white/70">
+            <p>• Say "Reality, auto on" to enable continuous analysis</p>
+            <p>• Ask "What do you see?" to trigger analysis automatically</p>
+            <p>• Voice commands work completely hands-free</p>
+          </div>
+          
+          {/* Debug Section */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-white/60">🔧 Backend Debug</p>
+              <button 
+                onClick={testBackendConnection}
+                className="rounded-full border border-amber/30 bg-amber/10 px-3 py-1 text-xs text-amber hover:bg-amber/20 transition-colors"
+              >
+                Test Connection
+              </button>
+            </div>
+            {debugInfo && (
+              <div className="rounded-lg border border-white/10 bg-black/20 p-2 text-xs font-mono">
+                {debugInfo}
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -413,21 +588,115 @@ export default function LiveAppPage() {
                   ? `${annotations.length} highlights detected`
                   : null
             }
+            autoAnalysis={autoAnalysis}
+            nextAnalysisCountdown={nextAnalysisCountdown}
           />
+
+          {showDemoGuide ? (
+            <div className="glass mb-4 rounded-2xl p-4 text-sm text-white/70">
+              <p className="font-medium text-white/90">Try these demo flows</p>
+              <p className="mt-1">• Visual Guide: point camera at an object and analyze the frame.</p>
+              <p className="mt-1">• Interview Coach: answer a question out loud and click “Coach My Answer”.</p>
+            </div>
+          ) : null}
+
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <div className="glass rounded-xl p-3 text-xs text-white/65">
+              <p className="uppercase tracking-[0.2em] text-white/40">Mode</p>
+              <p className="mt-1 text-sm text-white">{mode === "interview_coach" ? "Interview Coach" : "Visual Guide"}</p>
+            </div>
+            <div className="glass rounded-xl p-3 text-xs text-white/65">
+              <p className="uppercase tracking-[0.2em] text-white/40">Session</p>
+              <p className="mt-1 truncate text-sm text-white">{sessionId ?? "Not started"}</p>
+            </div>
+            <div className="glass rounded-xl p-3 text-xs text-white/65">
+              <p className="uppercase tracking-[0.2em] text-white/40">Flow</p>
+              <p className="mt-1 text-sm text-white">{mode === "interview_coach" ? "Answer → Coach My Answer" : "Speak → Analyze frame"}</p>
+            </div>
+          </div>
+
+          {!sessionId ? (
+            <div className="glass mb-4 rounded-2xl p-4 text-sm text-white/65">
+              <p className="mb-2 text-white/85">🚀 Reality Copilot 2.0 - Auto Intelligence Edition</p>
+              <div className="flex flex-wrap gap-2">
+                {["Start session", "Allow permissions", "Try voice commands", "Enable auto-analysis"].map((step, idx) => (
+                  <span key={step} className="rounded-full border border-mint/30 bg-mint/10 px-3 py-1 text-xs text-mint">
+                    {idx + 1}. {step}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-white/55">🎯 NEW: Auto-analysis every 60s + hands-free voice control!</p>
+              <div className="mt-2 space-y-1 text-xs text-white/70">
+                <p>• Say "Reality, auto on" to enable continuous analysis</p>
+                <p>• Ask "What do you see?" to trigger analysis automatically</p>
+                <p>• Voice commands work completely hands-free</p>
+              </div>
+              
+              {/* Debug Section */}
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-white/60">🔧 Backend Debug</p>
+                  <button 
+                    onClick={testBackendConnection}
+                    className="rounded-full border border-amber/30 bg-amber/10 px-3 py-1 text-xs text-amber hover:bg-amber/20 transition-colors"
+                  >
+                    Test Connection
+                  </button>
+                </div>
+                {debugInfo && (
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-2 text-xs font-mono">
+                    {debugInfo}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr] h-[calc(100vh-8rem)]">
+        {/* Left Column - Video and Controls */}
+        <div className="space-y-3">
+          <CameraPanel
+            videoRef={videoRef}
+            frozenFrame={frozenFrame}
+            annotations={annotations}
+            ready={Boolean(stream)}
+            state={state}
+            frameHint={frameHint}
+            overlayHint={
+              isAnalyzing
+                ? mode === "interview_coach"
+                  ? "Coaching answer…"
+                  : "Analyzing latest frame…"
+                : mode === "visual_guide" && annotations.length > 0
+                  ? `${annotations.length} highlights detected`
+                  : null
+            }
+            autoAnalysis={autoAnalysis}
+            nextAnalysisCountdown={nextAnalysisCountdown}
+          />
+          
           <SessionControlBar
             started={Boolean(sessionId)}
             muted={muted}
             frozen={Boolean(frozenFrame)}
             busy={isAnalyzing || state === "thinking" || state === "connecting"}
             analyzeLabel={mode === "interview_coach" ? "Coach My Answer" : "Analyze frame"}
+            autoAnalysis={autoAnalysis}
+            voiceCommandMode={voiceCommandMode}
+            nextAnalysisCountdown={nextAnalysisCountdown}
+            lastVoiceCommand={lastVoiceCommand}
             onStart={startSession}
             onEnd={endSession}
             onToggleMute={toggleMute}
             onFreeze={freeze}
             onAnalyze={runAnalysis}
             onClear={() => setAnnotations([])}
+            onToggleAutoAnalysis={() => setAutoAnalysis(!autoAnalysis)}
+            onToggleVoiceCommands={() => setVoiceCommandMode(!voiceCommandMode)}
           />
+          
           <WaveformVisualizer active={speech.isListening || state === "agent_speaking"} />
+          
           {isAnalyzing ? (
             <LoadingStates
               text={
@@ -439,12 +708,28 @@ export default function LiveAppPage() {
               }
             />
           ) : null}
+          
           {error ? <LoadingStates tone="error" text={error} /> : null}
         </div>
-        <div className="space-y-4">
-          <SceneInsightsPanel insight={insight} mode={mode} liveFillerHint={mode === "interview_coach" ? liveFillerHint : undefined} livePaceHint={mode === "interview_coach" ? livePaceHint : undefined} />
+        
+        {/* Right Column - Transcript and Info */}
+        <div className="flex flex-col space-y-3">
+          <div className="flex-1 min-h-0">
+            <TranscriptPanel transcript={transcript} />
+          </div>
+          
           <SessionTimelinePanel entries={timeline} />
-          <TranscriptPanel transcript={transcript} />
+          
+          {insight && (
+            <SceneInsightsPanel 
+              insight={insight} 
+              mode={mode} 
+              liveFillerHint={mode === "interview_coach" ? liveFillerHint : undefined} 
+              livePaceHint={mode === "interview_coach" ? livePaceHint : undefined} 
+            />
+          )}
+        </div>
+      </div>
         </div>
       </div>
       <FloatingActionButtons />

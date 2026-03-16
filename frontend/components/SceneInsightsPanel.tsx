@@ -16,7 +16,7 @@ export function SceneInsightsPanel({
   const isCoach = mode === "interview_coach";
 
   return (
-    <div className="glass min-h-[16rem] rounded-2xl p-4">
+    <div className="glass min-h-[12rem] rounded-2xl p-3">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-white/78">{isCoach ? "Interview coaching" : "Scene insights"}</h3>
         <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{isCoach ? "Transcript-first" : "Grounded vision"}</span>

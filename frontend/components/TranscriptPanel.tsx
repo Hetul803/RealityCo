@@ -1,13 +1,26 @@
 import { TranscriptEntry } from "@/lib/contracts";
+import { useEffect, useRef } from "react";
 
 export function TranscriptPanel({ transcript }: { transcript: TranscriptEntry[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new transcript is added
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [transcript]);
+
   return (
     <div className="glass rounded-2xl p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-white/78">Live transcript</h3>
         <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">Voice stream</span>
       </div>
-      <div className="h-[22rem] space-y-3 overflow-auto pr-1 text-sm">
+      <div 
+        ref={scrollRef}
+        className="h-[16rem] space-y-3 overflow-auto pr-1 text-sm scroll-smooth"
+      >
         {transcript.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.02] p-4 text-white/50">
             Transcript appears here as soon as you start speaking. Keep prompts concise for faster turn-around.

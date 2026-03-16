@@ -21,10 +21,7 @@ export function Hero() {
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-6 px-6 pb-20 pt-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-        <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-mint">
-          <Sparkles className="h-3.5 w-3.5" /> Gemini Live Agent Challenge
-        </p>
-        <h1 className="mt-5 text-4xl font-semibold leading-[1.08] md:text-6xl">
+        <h1 className="text-4xl font-semibold leading-[1.08] md:text-6xl">
           Show the world to your AI.
           <br />
           <span className="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">A live copilot for voice + vision.</span>
@@ -39,7 +36,6 @@ export function Hero() {
           >
             Start Live Session <ArrowRight className="ml-1 inline h-4 w-4 transition group-hover:translate-x-0.5" />
           </Link>
-          <p className="text-sm text-white/55">Judge-ready in under 30 seconds.</p>
         </div>
 
         <div className="mt-10 grid gap-3 sm:grid-cols-3">

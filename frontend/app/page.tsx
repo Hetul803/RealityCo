@@ -8,13 +8,12 @@ export default function HomePage() {
       <AmbientBackground />
       <Navbar />
       <Hero />
-      <section className="mx-auto max-w-7xl px-6">
-        <div className="glass rounded-3xl p-6 md:p-8">
-          <p className="text-xs uppercase tracking-[0.2em] text-mint/80">Demo framing</p>
-          <h2 className="mt-3 text-2xl font-semibold md:text-3xl">Talk. Point. Freeze. Explain.</h2>
-          <p className="mt-3 max-w-3xl text-sm text-white/65 md:text-base">
-            Open <span className="text-white">/app</span>, grant camera and microphone, ask “What do you see?”, then press Analyze Current Frame.
-            Judges instantly see a live multimodal flow with grounded overlays.
+      <section className="mx-auto max-w-7xl px-6 pb-8">
+        <div className="glass rounded-2xl p-4 md:p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Getting Started</p>
+          <h2 className="mt-2 text-lg font-semibold md:text-xl">Talk. Point. Freeze. Understand.</h2>
+          <p className="mt-2 max-w-2xl text-sm text-white/60">
+            Open <span className="text-white/80">/app</span>, grant camera and microphone, ask "What do you see?", then press Analyze Frame to explore your environment with AI guidance.
           </p>
         </div>
       </section>
