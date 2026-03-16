@@ -16,14 +16,42 @@ This qualifies for the **Live Agents** category because it provides:
 - Cloud Run deployment path on Google Cloud
 
 ## 3) Feature List
-- 🎙️ Live voice interaction in-browser (speech recognition input + TTS output fallback)
-- 🧭 Dual in-app modes: **Visual Guide** and **Interview Coach**
-- 📷 Camera-first interface with premium glassmorphism UI
-- 🧊 Freeze-and-explain mode for stable visual grounding
-- 🧠 Gemini visual analysis + structured interview coaching JSON outputs
-- 🗂️ Mode-aware insights panel and live transcript history
-- 🧭 Session states: idle, connecting, listening, speaking, analyzing, thinking, error
-- 🧱 Optional snapshot artifact upload to Google Cloud Storage
+### 🚀 Reality Copilot 2.0 - Auto Intelligence Edition
+
+#### **Core Features**
+- 🎙️ **Live voice interaction** with natural speech recognition and TTS
+- 🧭 **Dual modes**: **Visual Guide** (camera-first) and **Interview Coach** (transcript-first)
+- 📷 **Premium camera interface** with glassmorphism UI
+- 🧊 **Freeze-and-explain** mode for stable visual grounding
+- 🧠 **Gemini-powered analysis** with structured JSON outputs
+
+#### **🆕 Auto Intelligence Features**
+- ⏰ **Continuous analysis** every 60 seconds when enabled
+- 🎤 **Voice commands** for hands-free control:
+  - "Reality, analyze frame" → Instant analysis
+  - "Reality, freeze" → Freeze/unfreeze video
+  - "Reality, auto on/off" → Toggle continuous analysis
+  - "What do you see?" → Auto-trigger analysis
+  - "Clear overlays" → Remove annotations
+- 🤖 **Proactive AI assistance** with contextual triggers
+- 📜 **Auto-scrolling transcript** to latest messages
+- 📋 **Collapsible timeline** dropdown (space-saving)
+- 🎯 **Single-page layout** - everything fits on one screen
+
+#### **UI/UX Enhancements**
+- 🎨 **Professional judge-ready design** - no scrolling required
+- 📱 **Responsive layout** with video + transcript side-by-side
+- 🔊 **Improved TTS voice quality** with natural pacing
+- 🎛️ **Enhanced controls** with visual feedback
+- 📊 **Quality indicators** and status badges
+- 🧹 **Clean, minimal aesthetic**
+
+#### **Technical Improvements**
+- 🔧 **Better error handling** and debugging
+- 🌐 **Network connectivity testing** and fallbacks
+- 🔒 **Proper session cleanup** (mic turns off when ending)
+- 📹 **Enhanced camera permissions** handling
+- 🚀 **Production-ready deployment** configurations
 
 ## 4) Architecture Overview
 See [docs/architecture.md](docs/architecture.md).
@@ -85,24 +113,48 @@ Open:
 - Frontend: http://localhost:3000
 - Backend health: http://localhost:8000/api/health
 
-## 9) Deployment (Google Cloud Run)
-Use the provided helper to deploy backend **and** frontend:
+## 9) Deployment
+
+### 🚀 Quick Deployment Options
+
+#### **Option 1: Google Cloud Run (Recommended)**
+Full app in one container - easiest for demos and hackathons:
 ```bash
-PROJECT_ID=your-project-id GEMINI_API_KEY=your-key scripts/deploy-cloud-run.sh
+# Set your credentials
+export PROJECT_ID="your-gcp-project-id"
+export GEMINI_API_KEY="your-gemini-api-key"
+
+# Deploy with script
+./deploy-cloudrun.sh
 ```
 
-This script will:
-1. Build + deploy `reality-copilot-api`
-2. Read backend service URL
-3. Build + deploy `reality-copilot-web` with `NEXT_PUBLIC_API_BASE_URL` set automatically
-
-Useful options:
+#### **Option 2: Vercel + Separate Backend**
+Production-ready with global CDN:
 ```bash
-REGION=us-central1 API_SERVICE=reality-copilot-api WEB_SERVICE=reality-copilot-web scripts/deploy-cloud-run.sh
-DEPLOY_FRONTEND=false PROJECT_ID=... GEMINI_API_KEY=... scripts/deploy-cloud-run.sh
+# Deploy frontend to Vercel
+vercel --prod
+
+# Deploy backend to Railway/Render/Cloud Run
+# See DEPLOYMENT.md for detailed instructions
 ```
 
-Only required secret for working model calls is `GEMINI_API_KEY`.
+### 📋 Deployment Files Included
+- `vercel.json` - Vercel configuration
+- `Dockerfile` - Multi-stage build for Cloud Run
+- `deploy-cloudrun.sh` - Automated Cloud Run deployment
+- `DEPLOYMENT.md` - Complete deployment guide
+
+### 🔧 Environment Variables Required
+- `GEMINI_API_KEY` - Your Gemini API key (required)
+- `NEXT_PUBLIC_API_BASE_URL` - Backend URL (for frontend)
+- `PORT` - Application port (default: 8080)
+
+### 🌐 Access Your Deployed App
+After deployment, your app will be available at the provided URL with full functionality including:
+- Voice commands and continuous analysis
+- Camera feed and visual overlays  
+- Interview coaching and visual guidance
+- Professional single-page UI
 
 ## 10) How Gemini Is Used
 - `POST /api/audio/transcript`: concise conversational response from Gemini text generation
